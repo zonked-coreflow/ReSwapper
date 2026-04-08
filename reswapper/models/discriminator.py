@@ -80,8 +80,9 @@ class ProjectedDiscriminator(nn.Module):
         Returns:
             list of per-patch logits from each head
         """
-        with torch.no_grad():
-            features = self._extract_features(x)
+        # Enable gradient flow through the backbone for R1/R2 penalties
+        # (backbone weights are frozen, but gradients w.r.t. input must flow)
+        features = self._extract_features(x)
 
         logits = []
         for feat, head in zip(features, self.heads):
