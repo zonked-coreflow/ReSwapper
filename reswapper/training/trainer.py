@@ -300,17 +300,45 @@ class Trainer:
         source_embedding = batch["source_embedding"]  # [B, 512]
         is_same_identity = batch["is_same_identity"]  # [B]
 
-        # Get or compute target latent and parsing
-        if "target_latent" in batch:
-            target_latent = batch["target_latent"]
-        else:
-            target_latent = self.vae.encode(target_image)
-
+        # Get parsing map (needed for occlusion augmentation + generator input)
         if "target_parsing" in batch:
             target_parsing = batch["target_parsing"]
         else:
-            latent_h, latent_w = target_latent.shape[2], target_latent.shape[3]
-            target_parsing = self.face_parser(target_image, target_size=(latent_h, latent_w))
+            target_parsing = self.face_parser(target_image, target_size=target_image.shape[-2:])
+
+        # Apply occlusion augmentation to target images
+        # Priority: real occlusion masks (from user-provided data) > synthetic augmentation
+        gt_occlusion_masks = []
+        is_augmented = []
+        augmented_images = []
+        has_real_occ = batch.get("has_real_occlusion", torch.zeros(target_image.shape[0], dtype=torch.bool))
+
+        for i in range(target_image.shape[0]):
+            if has_real_occ[i] and "real_occlusion_mask" in batch:
+                # Use real occlusion mask — no synthetic augmentation needed
+                augmented_images.append(target_image[i])
+                gt_occlusion_masks.append(batch["real_occlusion_mask"][i])
+                is_augmented.append(True)  # treat as augmented so mask BCE loss fires
+            else:
+                # Apply synthetic occlusion augmentation
+                parsing_i = target_parsing[i] if target_parsing.shape[-1] == target_image.shape[-1] else None
+                aug_img, occ_mask, aug_flag = self.occlusion_augmenter(
+                    target_image[i], parsing_map=parsing_i
+                )
+                augmented_images.append(aug_img)
+                gt_occlusion_masks.append(occ_mask)
+                is_augmented.append(aug_flag)
+
+        target_image_aug = torch.stack(augmented_images)
+        gt_occlusion_mask = torch.stack(gt_occlusion_masks).to(self.device)
+        is_augmented_t = torch.tensor(is_augmented, dtype=torch.bool, device=self.device)
+
+        # Encode augmented target to latent space
+        if "target_latent" in batch and not is_augmented_t.any():
+            # Use cached latent only if no augmentation was applied
+            target_latent = batch["target_latent"]
+        else:
+            target_latent = self.vae.encode(target_image_aug)
 
         # Resize parsing to latent spatial size if needed
         if target_parsing.shape[-1] != target_latent.shape[-1]:
@@ -408,8 +436,17 @@ class Trainer:
             g_lm = self.landmark_loss(output_pixels, target_pixels) * cfg_l.landmark_weight
             g_total = g_total + g_gaze + g_expr + g_lm
 
-            # Occlusion mask losses
-            mask_losses = self.occlusion_loss(swap_mask)
+            # Occlusion mask losses — use GT masks from synthetic augmentation
+            # Resize GT mask to latent spatial size for comparison
+            gt_mask_latent = F.interpolate(
+                gt_occlusion_mask,
+                size=swap_mask.shape[-2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+            mask_losses = self.occlusion_loss(
+                swap_mask, gt_mask=gt_mask_latent, is_augmented=is_augmented_t
+            )
             for k, v in mask_losses.items():
                 g_total = g_total + v
                 metrics[f"loss/{k}"] = v.item()

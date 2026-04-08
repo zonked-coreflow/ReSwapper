@@ -108,11 +108,23 @@ class VGGFace2Dataset(Dataset):
         else:
             latent = None
 
+        # Load real occlusion mask if available
+        # These come from scripts/mask_occlusions.py (SAM2/manual/parser)
+        # 1=face visible (swap), 0=occluded (keep target)
+        occlusion_path = base_dir / f"{stem}_occlusion.npy"
+        if occlusion_path.exists():
+            occlusion_mask = torch.from_numpy(np.load(str(occlusion_path))).float()
+            if occlusion_mask.dim() == 2:
+                occlusion_mask = occlusion_mask.unsqueeze(0)  # [1, H, W]
+        else:
+            occlusion_mask = None
+
         return {
             "image": img,
             "embedding": embedding,
             "parsing": parsing,
             "latent": latent,
+            "occlusion_mask": occlusion_mask,
         }
 
     def __getitem__(self, idx: int) -> dict:
@@ -150,6 +162,14 @@ class VGGFace2Dataset(Dataset):
         # Include latents if available
         if target_data["latent"] is not None:
             result["target_latent"] = target_data["latent"]
+
+        # Include real occlusion mask if available
+        # These come from user-provided masked images (tubes, hands, etc.)
+        if target_data["occlusion_mask"] is not None:
+            result["real_occlusion_mask"] = target_data["occlusion_mask"]
+            result["has_real_occlusion"] = torch.tensor(True, dtype=torch.bool)
+        else:
+            result["has_real_occlusion"] = torch.tensor(False, dtype=torch.bool)
 
         return result
 
