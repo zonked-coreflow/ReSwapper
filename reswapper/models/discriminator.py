@@ -21,7 +21,7 @@ class ProjectedDiscriminator(nn.Module):
     def __init__(
         self,
         backbone: str = "dinov2_vitb14",
-        extract_layers: list[int] = (3, 6, 9, 12),
+        extract_layers: list[int] = (2, 5, 8, 11),  # 0-indexed, DINOv2-B has blocks 0-11
         head_channels: int = 256,
     ):
         super().__init__()

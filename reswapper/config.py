@@ -51,7 +51,7 @@ class GeneratorConfig:
 @dataclass
 class DiscriminatorConfig:
     backbone: str = "dinov2_vitb14"
-    extract_layers: List[int] = field(default_factory=lambda: [3, 6, 9, 12])
+    extract_layers: List[int] = field(default_factory=lambda: [2, 5, 8, 11])  # 0-indexed, DINOv2-B has blocks 0-11
     head_channels: int = 256
 
 

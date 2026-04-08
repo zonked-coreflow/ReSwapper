@@ -40,7 +40,7 @@ generator:
 
 discriminator:
   backbone: "dinov2_vitb14"
-  extract_layers: [3, 6, 9, 12]
+  extract_layers: [2, 5, 8, 11]
   head_channels: 256
 
 identity:
