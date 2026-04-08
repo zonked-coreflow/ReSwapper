@@ -112,12 +112,22 @@ def rpgan_loss_g(real_logits: list[torch.Tensor], fake_logits: list[torch.Tensor
     return loss / len(real_logits)
 
 
-def r1_penalty(discriminator: nn.Module, real_images: torch.Tensor) -> torch.Tensor:
+def r1_penalty(discriminator: nn.Module, real_images: torch.Tensor, max_size: int = 256) -> torch.Tensor:
     """R1 gradient penalty on real data.
 
-    Uses torch.nn.attention.sdpa_kernel to disable efficient attention backends
-    that don't support second-order gradients (needed for create_graph=True).
+    Downscales images before computing penalty to save memory — the MATH
+    attention backend needed for second-order gradients uses much more
+    memory than efficient attention.
+
+    Args:
+        discriminator: the discriminator module
+        real_images: [B, 3, H, W] real images
+        max_size: downscale to this resolution for penalty computation
     """
+    # Downscale to fit in memory with MATH attention
+    if real_images.shape[-1] > max_size:
+        real_images = F.interpolate(real_images, size=(max_size, max_size), mode="bilinear", align_corners=False)
+
     real_images = real_images.detach().requires_grad_(True)
     with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
         real_logits = discriminator(real_images)
@@ -126,8 +136,11 @@ def r1_penalty(discriminator: nn.Module, real_images: torch.Tensor) -> torch.Ten
     return grads.pow(2).reshape(grads.shape[0], -1).sum(1).mean()
 
 
-def r2_penalty(discriminator: nn.Module, fake_images: torch.Tensor) -> torch.Tensor:
+def r2_penalty(discriminator: nn.Module, fake_images: torch.Tensor, max_size: int = 256) -> torch.Tensor:
     """R2 gradient penalty on fake data."""
+    if fake_images.shape[-1] > max_size:
+        fake_images = F.interpolate(fake_images, size=(max_size, max_size), mode="bilinear", align_corners=False)
+
     fake_images = fake_images.detach().requires_grad_(True)
     with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
         fake_logits = discriminator(fake_images)
