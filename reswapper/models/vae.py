@@ -33,18 +33,20 @@ class FluxVAE(nn.Module):
         for p in self.vae.parameters():
             p.requires_grad = False
         self.scaling_factor = self.vae.config.scaling_factor
+        self.dtype = dtype
+        self.device = device
 
     @torch.no_grad()
     def encode(self, images: torch.Tensor) -> torch.Tensor:
         """Encode pixel-space images to latent space.
 
         Args:
-            images: [B, 3, H, W] in [0, 1] range
+            images: [B, 3, H, W] in [0, 1] range, any dtype
         Returns:
-            latent: [B, 16, H//8, W//8]
+            latent: [B, 16, H//8, W//8] in VAE's dtype
         """
-        # VAE expects [-1, 1] range
-        x = images * 2.0 - 1.0
+        # VAE expects [-1, 1] range, matching dtype
+        x = (images * 2.0 - 1.0).to(dtype=self.dtype, device=self.device)
         latent_dist = self.vae.encode(x).latent_dist
         latent = latent_dist.sample()
         return latent * self.scaling_factor
@@ -54,11 +56,11 @@ class FluxVAE(nn.Module):
         """Decode latent to pixel-space images.
 
         Args:
-            latent: [B, 16, H, W]
+            latent: [B, 16, H, W] any dtype
         Returns:
-            images: [B, 3, H*8, W*8] in [0, 1] range
+            images: [B, 3, H*8, W*8] in [0, 1] range, float32
         """
-        latent = latent / self.scaling_factor
+        latent = (latent / self.scaling_factor).to(dtype=self.dtype, device=self.device)
         decoded = self.vae.decode(latent).sample
-        # Convert from [-1, 1] to [0, 1]
-        return (decoded + 1.0) / 2.0
+        # Convert from [-1, 1] to [0, 1], return float32 for loss computation
+        return ((decoded + 1.0) / 2.0).float()
