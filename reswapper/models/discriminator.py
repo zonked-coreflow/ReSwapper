@@ -113,10 +113,14 @@ def rpgan_loss_g(real_logits: list[torch.Tensor], fake_logits: list[torch.Tensor
 
 
 def r1_penalty(discriminator: nn.Module, real_images: torch.Tensor) -> torch.Tensor:
-    """R1 gradient penalty on real data."""
+    """R1 gradient penalty on real data.
+
+    Uses torch.nn.attention.sdpa_kernel to disable efficient attention backends
+    that don't support second-order gradients (needed for create_graph=True).
+    """
     real_images = real_images.detach().requires_grad_(True)
-    real_logits = discriminator(real_images)
-    # Sum all logits across heads
+    with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
+        real_logits = discriminator(real_images)
     total = sum(l.sum() for l in real_logits)
     grads = torch.autograd.grad(outputs=total, inputs=real_images, create_graph=True)[0]
     return grads.pow(2).reshape(grads.shape[0], -1).sum(1).mean()
@@ -125,7 +129,8 @@ def r1_penalty(discriminator: nn.Module, real_images: torch.Tensor) -> torch.Ten
 def r2_penalty(discriminator: nn.Module, fake_images: torch.Tensor) -> torch.Tensor:
     """R2 gradient penalty on fake data."""
     fake_images = fake_images.detach().requires_grad_(True)
-    fake_logits = discriminator(fake_images)
+    with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
+        fake_logits = discriminator(fake_images)
     total = sum(l.sum() for l in fake_logits)
     grads = torch.autograd.grad(outputs=total, inputs=fake_images, create_graph=True)[0]
     return grads.pow(2).reshape(grads.shape[0], -1).sum(1).mean()
