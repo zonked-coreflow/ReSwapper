@@ -1,0 +1,12 @@
+data:
+  resolution: 1024
+
+training:
+  total_steps: 200000
+  g_lr: 0.00001
+  d_lr: 0.00004
+  warmup_steps: 2000
+  ema_start_step: 0
+
+generator:
+  gradient_checkpointing: true

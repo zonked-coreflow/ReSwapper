@@ -1,0 +1,98 @@
+seed: 42
+
+data:
+  dataset_dir: "data/preprocessed_vggface2"
+  ffhq_dir: "data/preprocessed_ffhq"
+  num_workers: 16
+  pin_memory: true
+  resolution: 512
+  same_identity_ratio: 0.5
+  occlusion_augment_ratio: 0.3
+
+augmentation:
+  horizontal_flip: 0.5
+  color_jitter: true
+  brightness: 0.2
+  contrast: 0.2
+  saturation: 0.2
+  hue: 0.1
+  random_grayscale: 0.1
+  jpeg_quality_range: [60, 100]
+  jpeg_probability: 0.3
+  gaussian_blur_probability: 0.1
+  gaussian_noise_std: 0.02
+  gaussian_noise_probability: 0.2
+  random_erasing: 0.05
+
+generator:
+  base_channels: 256
+  bottleneck_channels: 512
+  latent_channels: 16
+  id_dim: 512
+  num_id_tokens: 16
+  cross_attn_resolutions: [8, 16, 32]
+  adain_resolutions: [64]
+  num_bottleneck_blocks: 2
+  group_size: 16
+  expansion: 1.5
+  gradient_checkpointing: false
+  parsing_channels: 19
+
+discriminator:
+  backbone: "dinov2_vitb14"
+  extract_layers: [3, 6, 9, 12]
+  head_channels: 256
+
+identity:
+  model: "blendface"
+  embedding_dim: 512
+  num_tokens: 16
+  freeze_backbone: true
+
+training:
+  batch_size: 32
+  total_steps: 500000
+  g_lr: 0.0001
+  d_lr: 0.0004
+  g_betas: [0.0, 0.99]
+  d_betas: [0.0, 0.99]
+  warmup_steps: 5000
+  lr_schedule: "cosine"
+  min_lr_ratio: 0.01
+  use_amp: true
+  amp_dtype: "bfloat16"
+  gradient_accumulation_steps: 1
+  grad_clip_norm: 1.0
+  ema_decay: 0.9999
+  ema_start_step: 5000
+  d_reg_interval: 16
+  r1_gamma: 10.0
+  r2_gamma: 10.0
+
+loss:
+  l1_weight: 10.0
+  lpips_weight: 0.1
+  pdino_weight: 0.01
+  identity_weight: 5.0
+  adversarial_weight: 1.0
+  gaze_weight: 0.5
+  expression_weight: 0.3
+  landmark_weight: 0.1
+  mask_bce_weight: 5.0
+  mask_reg_weight: 0.5
+  mask_tv_weight: 0.1
+
+checkpoint:
+  save_dir: "checkpoints"
+  save_every_steps: 5000
+  keep_top_k: 5
+  metric_for_best: "val/identity_similarity"
+  metric_mode: "max"
+
+logging:
+  log_every_steps: 100
+  val_every_steps: 5000
+  val_num_samples: 64
+  use_wandb: true
+  wandb_project: "reswapper-v2"
+  num_preview_samples: 8

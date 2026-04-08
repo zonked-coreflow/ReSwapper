@@ -1,0 +1,20 @@
+data:
+  num_workers: 2
+  resolution: 512
+
+training:
+  batch_size: 2
+  total_steps: 1000
+  warmup_steps: 100
+  use_amp: false
+
+generator:
+  gradient_checkpointing: false
+
+logging:
+  log_every_steps: 10
+  val_every_steps: 100
+  use_wandb: false
+
+checkpoint:
+  save_every_steps: 500
